@@ -1,0 +1,28 @@
+# Environment & Secrets
+.env
+.env.local
+*.env
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.pytest_cache/
+*.db
+*.sqlite3
+
+# Node / Expo / Mobile
+node_modules/
+.expo/
+dist/
+web-build/
+*.log
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
