@@ -24,10 +24,18 @@ export const SearchResultsScreen = ({ route, navigation }: any) => {
         travel_preference: params.travelPreference || 'anyone',
       });
 
+      if (params.travelDate) {
+        queryParams.append('travel_date', params.travelDate);
+      }
+      if (params.travelTime) {
+        queryParams.append('travel_time', params.travelTime.includes('PM') ? '17:00' : '08:00');
+      }
+
       const res = await fetchWithAuth(`/rides/search?${queryParams.toString()}`);
-      setResults(res);
+      setResults(res || []);
     } catch (e: any) {
       console.log('Search error:', e);
+      setResults([]);
     } finally {
       setLoading(false);
     }
@@ -55,7 +63,7 @@ export const SearchResultsScreen = ({ route, navigation }: any) => {
 
       Alert.alert(
         'Seat Requested!',
-        `Your request to join ${item.ride.driver?.name || 'the driver'}'s ride has been sent. You will be notified when accepted.`,
+        `Your request to join ${item.ride.driver?.name || 'the driver'}'s ride has been submitted. You will be notified when accepted.`,
         [{ text: 'View My Rides', onPress: () => navigation.navigate('MyRides') }]
       );
     } catch (err: any) {
@@ -80,12 +88,15 @@ export const SearchResultsScreen = ({ route, navigation }: any) => {
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={colors.ink} />
-            <Text style={styles.loadingText}>Matching overlapping routes...</Text>
+            <Text style={styles.loadingText}>Finding matching rides...</Text>
           </View>
         ) : results.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No matching rides found</Text>
-            <Text style={styles.emptySub}>Try adjusting your travel time or pickup points.</Text>
+            <Text style={styles.emptyTitle}>No matching rides</Text>
+            <Text style={styles.emptySub}>
+              We couldn't find a published ride for this route and time window.{'\n\n'}
+              You can try searching another date, time, or nearby location.
+            </Text>
           </View>
         ) : (
           results.map((item) => (
@@ -173,12 +184,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: colors.ink,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   emptySub: {
     fontSize: 12,
     color: colors.muted,
     textAlign: 'center',
+    lineHeight: 18,
   },
   noticeCard: {
     backgroundColor: colors.greenbg,

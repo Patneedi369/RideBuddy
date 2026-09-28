@@ -3,25 +3,42 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, ScrollView, Ale
 import { useAuth } from '../../context/AuthContext';
 import { fetchWithAuth } from '../../services/api';
 import { Button } from '../../components/Button';
+import { LocationPickerModal } from '../../components/LocationPickerModal';
+import { DateTimePickerModal } from '../../components/DateTimePickerModal';
+import { LocationItem } from '../../services/location';
 import { colors, borderRadius, spacing } from '../../theme';
 import { TravelPreference, Vehicle } from '../../types';
 
-const INDIAN_CITIES = [
-  { name: 'Kakinada', lat: 16.9891, lng: 82.2475 },
-  { name: 'Samalkota', lat: 17.0500, lng: 82.1667 },
-  { name: 'Rajahmundry', lat: 17.0005, lng: 81.8040 },
-  { name: 'Visakhapatnam', lat: 17.6868, lng: 83.2185 },
-  { name: 'Vijayawada', lat: 16.5062, lng: 80.6480 },
-];
-
 export const OfferRideScreen = ({ navigation }: any) => {
   const { user, vehicles, fetchVehicles } = useAuth();
-  const [originIndex, setOriginIndex] = useState(0);
-  const [destIndex, setDestIndex] = useState(2);
+
+  const [fromLoc, setFromLoc] = useState<LocationItem>({
+    id: 'kakinada',
+    name: 'Kakinada',
+    description: 'Andhra Pradesh, India',
+    lat: 16.9891,
+    lng: 82.2475,
+  });
+
+  const [toLoc, setToLoc] = useState<LocationItem>({
+    id: 'rajahmundry',
+    name: 'Rajahmundry',
+    description: 'East Godavari, Andhra Pradesh',
+    lat: 17.0005,
+    lng: 81.8040,
+  });
+
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date(Date.now() + 24 * 60 * 60 * 1000));
+  const [selectedTimeStr, setSelectedTimeStr] = useState<string>('8:00 AM');
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [seats, setSeats] = useState<number>(2);
   const [whoCanJoin, setWhoCanJoin] = useState<TravelPreference>(user?.gender === 'female' ? 'women_only' : 'anyone');
+
+  const [showFromModal, setShowFromModal] = useState(false);
+  const [showToModal, setShowToModal] = useState(false);
+  const [showDateTimeModal, setShowDateTimeModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     fetchVehicles().then((vList) => {
@@ -33,6 +50,8 @@ export const OfferRideScreen = ({ navigation }: any) => {
   }, []);
 
   const handleCreateRide = async () => {
+    setErrorMsg('');
+
     if (!selectedVehicle) {
       Alert.alert('Vehicle Required', 'Please add a vehicle before offering a ride.', [
         { text: 'Add Vehicle', onPress: () => navigation.navigate('AddVehicle') },
@@ -40,28 +59,42 @@ export const OfferRideScreen = ({ navigation }: any) => {
       return;
     }
 
-    if (whoCanJoin === 'women_only' && user?.gender !== 'female') {
-      Alert.alert('Gender Restriction', 'Only female drivers can offer Women-only rides.');
+    if (!fromLoc || !fromLoc.lat || !fromLoc.lng) {
+      setErrorMsg('Please select a starting point.');
       return;
     }
 
-    const origin = INDIAN_CITIES[originIndex];
-    const dest = INDIAN_CITIES[destIndex];
+    if (!toLoc || !toLoc.lat || !toLoc.lng) {
+      setErrorMsg('Please select a destination.');
+      return;
+    }
+
+    const dist = Math.hypot(fromLoc.lat - toLoc.lat, fromLoc.lng - toLoc.lng);
+    if (dist < 0.001 || fromLoc.name.toLowerCase() === toLoc.name.toLowerCase()) {
+      setErrorMsg('Starting point and destination cannot be the exact same location.');
+      return;
+    }
+
+    if (whoCanJoin === 'women_only' && user?.gender !== 'female') {
+      setErrorMsg('Only female drivers can offer Women-only rides.');
+      return;
+    }
 
     setLoading(true);
     try {
-      const departureTime = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const dateIso = selectedDate.toISOString().split('T')[0];
+      const departureTime = `${dateIso}T08:00:00Z`;
 
       await fetchWithAuth('/rides', {
         method: 'POST',
         body: JSON.stringify({
           vehicle_id: selectedVehicle.id,
-          origin_name: origin.name,
-          origin_lat: origin.lat,
-          origin_lng: origin.lng,
-          destination_name: dest.name,
-          destination_lat: dest.lat,
-          destination_lng: dest.lng,
+          origin_name: fromLoc.name,
+          origin_lat: fromLoc.lat,
+          origin_lng: fromLoc.lng,
+          destination_name: toLoc.name,
+          destination_lat: toLoc.lat,
+          destination_lng: toLoc.lng,
           departure_time: departureTime,
           travel_preference: whoCanJoin,
           total_seats: seats,
@@ -75,14 +108,27 @@ export const OfferRideScreen = ({ navigation }: any) => {
         { text: 'View My Rides', onPress: () => navigation.navigate('MyRides') },
       ]);
     } catch (err: any) {
-      Alert.alert('Failed to Create Ride', err.message || 'Something went wrong.');
+      setErrorMsg(err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
     }
   };
 
-  const origin = INDIAN_CITIES[originIndex];
-  const dest = INDIAN_CITIES[destIndex];
+  const getFormattedDateTimeText = () => {
+    const today = new Date().toDateString();
+    const tom = new Date();
+    tom.setDate(tom.getDate() + 1);
+    const tomString = tom.toDateString();
+
+    let dateLabel = 'Today';
+    if (selectedDate.toDateString() === tomString) {
+      dateLabel = 'Tomorrow';
+    } else if (selectedDate.toDateString() !== today) {
+      dateLabel = selectedDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    }
+
+    return `${dateLabel} · ${selectedTimeStr}`;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -93,29 +139,35 @@ export const OfferRideScreen = ({ navigation }: any) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Offer a ride</Text>
 
+        {errorMsg ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          </View>
+        ) : null}
+
         <Text style={styles.label}>FROM</Text>
-        <TouchableOpacity
-          style={styles.inputBox}
-          onPress={() => setOriginIndex((prev) => (prev + 1) % INDIAN_CITIES.length)}
-        >
-          <Text style={styles.inputText}>📍 {origin.name}</Text>
+        <TouchableOpacity style={styles.inputBox} onPress={() => setShowFromModal(true)}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.inputText}>📍 {fromLoc.name}</Text>
+            <Text style={styles.inputSub} numberOfLines={1}>{fromLoc.description}</Text>
+          </View>
           <Text style={styles.iconText}>⌖</Text>
         </TouchableOpacity>
 
         <Text style={styles.label}>TO</Text>
-        <TouchableOpacity
-          style={styles.inputBox}
-          onPress={() => setDestIndex((prev) => (prev + 1) % INDIAN_CITIES.length)}
-        >
-          <Text style={styles.inputText}>📍 {dest.name}</Text>
+        <TouchableOpacity style={styles.inputBox} onPress={() => setShowToModal(true)}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.inputText}>📍 {toLoc.name}</Text>
+            <Text style={styles.inputSub} numberOfLines={1}>{toLoc.description}</Text>
+          </View>
           <Text style={styles.iconText}>⌖</Text>
         </TouchableOpacity>
 
         <Text style={styles.label}>DATE & TIME</Text>
-        <View style={styles.inputBox}>
-          <Text style={styles.inputText}>Tomorrow · 8:10 AM</Text>
+        <TouchableOpacity style={styles.inputBox} onPress={() => setShowDateTimeModal(true)}>
+          <Text style={styles.inputText}>📅 {getFormattedDateTimeText()}</Text>
           <Text style={styles.iconText}>⌄</Text>
-        </View>
+        </TouchableOpacity>
 
         <Text style={styles.label}>VEHICLE</Text>
         {vehicles.length === 0 ? (
@@ -177,6 +229,37 @@ export const OfferRideScreen = ({ navigation }: any) => {
           style={{ marginTop: spacing.lg }}
         />
       </ScrollView>
+
+      <LocationPickerModal
+        visible={showFromModal}
+        title="Select Starting Point"
+        onClose={() => setShowFromModal(false)}
+        onSelectLocation={(loc) => {
+          setFromLoc(loc);
+          setErrorMsg('');
+        }}
+      />
+
+      <LocationPickerModal
+        visible={showToModal}
+        title="Select Destination"
+        onClose={() => setShowToModal(false)}
+        onSelectLocation={(loc) => {
+          setToLoc(loc);
+          setErrorMsg('');
+        }}
+      />
+
+      <DateTimePickerModal
+        visible={showDateTimeModal}
+        selectedDate={selectedDate}
+        selectedTimeStr={selectedTimeStr}
+        onClose={() => setShowDateTimeModal(false)}
+        onSelectDateTime={(d, t) => {
+          setSelectedDate(d);
+          setSelectedTimeStr(t);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -206,6 +289,17 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
     marginBottom: spacing.md,
   },
+  errorBox: {
+    backgroundColor: colors.dangerbg,
+    borderRadius: borderRadius.md,
+    padding: 12,
+    marginBottom: spacing.xs,
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '600',
+  },
   label: {
     fontSize: 10,
     fontWeight: '800',
@@ -220,7 +314,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: borderRadius.md,
     paddingHorizontal: 14,
-    height: 50,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -238,6 +332,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.ink,
     fontWeight: '600',
+  },
+  inputSub: {
+    fontSize: 10,
+    color: colors.muted,
+    marginTop: 1,
   },
   iconText: {
     fontSize: 16,

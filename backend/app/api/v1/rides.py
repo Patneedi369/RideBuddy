@@ -72,6 +72,9 @@ def create_ride(
     db.refresh(ride)
     return ride
 
+from datetime import datetime, timedelta, timezone
+from app.core.config import settings
+
 @router.get("/search", response_model=List[RideSearchResult])
 def search_rides(
     origin_lat: float,
@@ -80,6 +83,8 @@ def search_rides(
     destination_lng: float,
     pickup_name: Optional[str] = "Pickup point",
     drop_name: Optional[str] = "Drop point",
+    travel_date: Optional[str] = None,  # YYYY-MM-DD
+    travel_time: Optional[str] = None,  # e.g. 08:00
     travel_preference: Optional[TravelPreferenceEnum] = TravelPreferenceEnum.ANYONE,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -92,7 +97,7 @@ def search_rides(
                 detail="Women-only search preference is reserved for female passengers."
             )
 
-    # Query published rides with available seats
+    # Base query: published rides with available seats
     query = db.query(Ride).options(
         joinedload(Ride.driver),
         joinedload(Ride.vehicle)
@@ -101,6 +106,28 @@ def search_rides(
         Ride.available_seats > 0,
         Ride.driver_id != current_user.id
     )
+
+    # Date and Time Window Filtering
+    if travel_date:
+        try:
+            time_part = (travel_time or "08:00").strip()
+            # Normalize 12-hour AM/PM strings if present
+            if "AM" in time_part.upper() or "PM" in time_part.upper():
+                parsed_t = datetime.strptime(time_part.upper(), "%I:%M %p").time()
+                time_str = parsed_t.strftime("%H:%M:%S")
+            else:
+                time_str = time_part if len(time_part) == 8 else f"{time_part}:00"
+            
+            target_datetime_str = f"{travel_date}T{time_str}"
+            target_dt = datetime.fromisoformat(target_datetime_str)
+            
+            window_hours = getattr(settings, 'SEARCH_TIME_WINDOW_HOURS', 4)
+            min_dt = target_dt - timedelta(hours=window_hours)
+            max_dt = target_dt + timedelta(hours=window_hours)
+            
+            query = query.filter(Ride.departure_time >= min_dt, Ride.departure_time <= max_dt)
+        except Exception as e:
+            print(f"[SEARCH WARNING] Date parsing error: {e}")
 
     results = []
     rides = query.all()
@@ -207,7 +234,7 @@ def get_my_ride_history(
 
     passenger_requests = db.query(RideRequest).filter(
         RideRequest.passenger_id == current_user.id,
-        RideRequest.status.in_([RequestStatusEnum.ACCEPTED, RequestStatusEnum.COMPLETED])
+        RideRequest.status == RequestStatusEnum.ACCEPTED
     ).all()
     
     passenger_ride_ids = [r.ride_id for r in passenger_requests]

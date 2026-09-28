@@ -119,17 +119,10 @@ export const HomeScreen = ({ navigation }: any) => {
               onPress={() => navigation.navigate('RideDetails', { rideId: upcomingRide.id })}
             />
           ) : (
-            <RouteCard
-              origin="Kakinada"
-              destination="Rajahmundry"
-              departureTime="Tomorrow · 8:10 AM"
-              availableSeats={1}
-              vehicleModel="Car"
-              isWomenOnly={true}
-              statusText="Confirmed"
-              statusVariant="green"
-              onPress={() => navigation.navigate('Find')}
-            />
+            <View style={styles.emptyUpcomingCard}>
+              <Text style={styles.emptyTitle}>No upcoming rides</Text>
+              <Text style={styles.emptySub}>Find a ride or offer a ride to get started.</Text>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -288,5 +281,24 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textAlign: 'center',
     lineHeight: 11,
+  },
+  emptyUpcomingCard: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: borderRadius.lg,
+    padding: 24,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.ink,
+    marginBottom: 4,
+  },
+  emptySub: {
+    fontSize: 11,
+    color: colors.muted,
+    textAlign: 'center',
   },
 });
