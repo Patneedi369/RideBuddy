@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { safeStorage } from '../services/storage';
 import { fetchWithAuth } from '../services/api';
 import { User, Vehicle, Gender } from '../types';
 
@@ -31,7 +31,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = async (): Promise<User | null> => {
     try {
-      const token = await AsyncStorage.getItem('auth_token');
+      const token = await safeStorage.getItem('auth_token');
       if (!token) {
         setUser(null);
         return null;
@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {
       console.log('Error refreshing profile:', e);
       setUser(null);
-      await AsyncStorage.removeItem('auth_token');
+      await safeStorage.removeItem('auth_token');
       return null;
     }
   };
@@ -69,7 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       method: 'POST',
       body: JSON.stringify({ phone_number: phone, otp_code: otp }),
     });
-    await AsyncStorage.setItem('auth_token', res.access_token);
+    await safeStorage.setItem('auth_token', res.access_token);
     const updatedUser = await refreshProfile();
     return {
       is_new_user: res.is_new_user,
@@ -117,7 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem('auth_token');
+    await safeStorage.removeItem('auth_token');
     setUser(null);
     setVehicles([]);
   };
